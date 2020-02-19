@@ -25,6 +25,40 @@ async function getRemixNum(guid) {
   let last = parts[parts.length - 2];
   return new Number(last.replace(/[a-z]/ig, ''));
 }
+
+async function fetchRemix(url) {
+  console.log("Downloading " + url);
+  fetch(url)
+    .then(function(response) {
+      return response.text()
+    })
+    .then(function(html) {
+
+      let links = [];
+      html.split('\n').forEach(line => {
+        let match = dlRe.exec(line);
+        if (match) {
+          links.push(match[1]);
+        }
+      })
+
+      let link = links[Math.floor(Math.random() * links.length)];
+      let parts = link.split('/')
+      let fn = dest + parts[parts.length - 1];
+      console.log("Downloading from " + link + " to " + fn);
+      fetch(link)
+        .then(function(response) {
+          var fd = fs.createWriteStream(fn);
+          response.body.pipe(fd);
+          fd.on('finish', () => {
+            fd.close();
+          });
+        });
+    })
+    .catch(function(err) {  
+      console.log('Failed to fetch page: ', err);  
+    });
+}
  
 (async () => {
  
@@ -36,43 +70,21 @@ async function getRemixNum(guid) {
     return d1.valueOf() - d2.valueOf();
   })
 
+  let caughtUp = false;
   let num = 0;
   for (let i = 0; i < feed.items.length; i++) {
     let item = feed.items[i];
     num = await getRemixNum(item.guid)
     if (num > last) {
-      console.log("Downloading " + item.guid);
-
-      fetch(item.guid)
-        .then(function(response) {
-          return response.text()
-        })
-        .then(function(html) {
-
-          let links = [];
-          html.split('\n').forEach(line => {
-            let match = dlRe.exec(line);
-            if (match) {
-              links.push(match[1]);
-            }
-          })
-
-          let link = links[Math.floor(Math.random() * links.length)];
-          let parts = link.split('/')
-          let fn = dest + parts[parts.length - 1];
-          console.log("Downloading from " + link + " to " + fn);
-          fetch(link)
-            .then(function(response) {
-              var fd = fs.createWriteStream(fn);
-              response.body.pipe(fd);
-              fd.on('finish', () => {
-                fd.close();
-              });
-            });
-        })
-        .catch(function(err) {  
-          console.log('Failed to fetch page: ', err);  
-        });
+      if (num - 1 != last && ! caughtUp) {
+        console.log("You haven't run this script for awhile, have you?");
+        for (var n = last + 1; n < num; n++) {
+          let url = "http://www.ocremix.org/remix/OCR0" + n + "/";
+          await fetchRemix(url);
+        }
+        caughtUp = true;
+      }
+      await fetchRemix(item.guid);
     } else {
       console.log("Already have " + item.guid);
     }
