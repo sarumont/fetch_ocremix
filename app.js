@@ -77,7 +77,6 @@ async function fetchRemix(url) {
     num = await getRemixNum(item.guid)
     if (num > last) {
       if (num - 1 != last && ! caughtUp) {
-        console.log("You haven't run this script for awhile, have you?");
         for (var n = last + 1; n < num; n++) {
           let url = "http://www.ocremix.org/remix/OCR0" + n + "/";
           await fetchRemix(url);
