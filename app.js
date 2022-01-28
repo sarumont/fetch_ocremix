@@ -1,99 +1,107 @@
 #!/usr/bin/env node
 
-const fs = require('fs');
-const Parser = require('rss-parser');
+import {
+  readFileSync,
+  accessSync,
+  createWriteStream,
+  writeFileSync
+} from 'fs';
+import * as path from 'path';
+import Parser from 'rss-parser';
+import fetch from 'node-fetch';
+
 const parser = new Parser();
-const fetch = require('node-fetch');
+const dlRe = /.*href="(.*)".*Download from.*/g;
+const dest = '/media/smb-chocobo.local-misc/OCR/';
 
-const dlRe = /.*href=\"(.*)\".*Download from.*/g;
-const dest = '/media/smb-chocobo.local-misc/OCR/'
-
-let lastFile = process.env.HOME + '/.ocr-last'
+const lastFile = path.join(process.env.HOME, '.ocr-last');
 let last = 0;
 try {
-  last = new Number(fs.readFileSync(lastFile, 'utf-8'));
+  last = Number(readFileSync(lastFile, 'utf-8'));
 } catch (e) {
   // don't care
 }
-console.log("Last: ", last);
+
+// TODO: debug
+console.log('Last: %s', last);
 
 /**
  * Strips a GUID (which is a URL) to the numeric version of the OCR ID
  */
-async function getRemixNum(guid) {
-  let parts = guid.split('/');
-  let last = parts[parts.length - 2];
-  return new Number(last.replace(/[a-z]/ig, ''));
+function getRemixNum(guid) {
+  const parts = guid.split('/');
+  const lLast = parts[parts.length - 2];
+  return Number(lLast.replace(/[a-z]/ig, ''));
 }
 
 async function fetchRemix(url) {
   console.log('Downloading %s', url);
-  fetch(url)
-    .then(function(response) {
-      return response.text()
-    })
-    .then(function(html) {
-
-      let links = [];
-      html.split('\n').forEach(line => {
-        let match = dlRe.exec(line);
+  return fetch(url)
+    .then((response) => response.text())
+    .then(async (html) => {
+      const links = [];
+      html.split('\n').forEach((line) => {
+        const match = dlRe.exec(line);
         if (match) {
           links.push(match[1]);
         }
-      })
+      });
 
-      let link = links[Math.floor(Math.random() * links.length)];
-      let parts = link.split('/')
-      let fn = dest + parts[parts.length - 1];
-      if (fs.accessSync(fn)) {
-        console.log('%s exists - skipping', )
+      const link = links[Math.floor(Math.random() * links.length)];
+      const parts = link.split('/');
+      const fn = dest + parts[parts.length - 1];
+      try {
+        accessSync(fn);
+        console.log('%s exists - skipping', fn);
         return;
+      } catch (e) {
+        // don't care
       }
       console.log('Downloading from %s to %s', link, fn);
-      fetch(link)
-        .then(function(response) {
-          var fd = fs.createWriteStream(fn);
-          response.body.pipe(fd);
-          fd.on('finish', () => {
-            fd.close();
-          });
-        });
+      const response = await fetch(link);
+      const fd = createWriteStream(fn);
+      response.body.pipe(fd);
+      fd.on('finish', () => {
+        fd.close();
+      });
     })
-    .catch(function(err) {  
-      console.log('Failed to fetch page: ', err);  
+    .catch((err) => {
+      console.log('Failed to fetch page: ', err);
     });
 }
- 
+
 (async () => {
- 
-  let feed = await parser.parseURL('http://ocremix.org/feeds/ten20/');
+  const feed = await parser.parseURL('http://ocremix.org/feeds/ten20/');
 
   feed.items.sort((a, b) => {
-    let d1 = new Date(a.isoDate);
-    let d2 = new Date(b.isoDate);
+    const d1 = new Date(a.isoDate);
+    const d2 = new Date(b.isoDate);
     return d1.valueOf() - d2.valueOf();
-  })
+  });
 
   let caughtUp = false;
   let num = 0;
+  const promises = [];
   for (let i = 0; i < feed.items.length; i++) {
-    let item = feed.items[i];
-    num = await getRemixNum(item.guid)
+    const item = feed.items[i];
+    num = getRemixNum(item.guid);
+    if (!last || last === 0) {
+      last = num - 1;
+    }
     if (num > last) {
-      if (num - 1 != last && ! caughtUp) {
-        for (var n = last + 1; n < num; n++) {
-          let url = "http://www.ocremix.org/remix/OCR0" + n + "/";
-          await fetchRemix(url);
+      if (num - 1 !== last && !caughtUp) {
+        for (let n = last + 1; n < num; n++) {
+          const url = `http://www.ocremix.org/remix/OCR0${n}/`;
+          promises.push(fetchRemix(url));
         }
         caughtUp = true;
       }
-      await fetchRemix(item.guid);
+      promises.push(fetchRemix(item.guid));
     } else {
-      console.log("Already have " + item.guid);
+      console.log('Already have %s', item.guid);
     }
   }
-
-  console.log('Setting new last to ' + num);
-  fs.writeFileSync(lastFile, `${num}`);
-
+  await Promise.all(promises);
+  console.log('Setting new last to %s', num);
+  writeFileSync(lastFile, `${num}`);
 })();
