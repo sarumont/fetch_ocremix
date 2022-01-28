@@ -12,8 +12,10 @@ import fetch from 'node-fetch';
 
 const parser = new Parser();
 const dlRe = /.*href="(.*)".*Download from.*/g;
+// TODO: configurable
 const dest = '/media/smb-chocobo.local-misc/OCR/';
 
+// TODO: stick this somewhere else?
 const lastFile = path.join(process.env.HOME, '.ocr-last');
 let last = 0;
 try {
