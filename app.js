@@ -6,7 +6,7 @@ const parser = new Parser();
 const fetch = require('node-fetch');
 
 const dlRe = /.*href=\"(.*)\".*Download from.*/g;
-const dest = '/media/chocobo/misc/OCR/latest/'
+const dest = '/media/smb-chocobo.local-misc/OCR/'
 
 let lastFile = process.env.HOME + '/.ocr-last'
 let last = 0;
@@ -27,7 +27,7 @@ async function getRemixNum(guid) {
 }
 
 async function fetchRemix(url) {
-  console.log("Downloading " + url);
+  console.log('Downloading %s', url);
   fetch(url)
     .then(function(response) {
       return response.text()
@@ -45,7 +45,11 @@ async function fetchRemix(url) {
       let link = links[Math.floor(Math.random() * links.length)];
       let parts = link.split('/')
       let fn = dest + parts[parts.length - 1];
-      console.log("Downloading from " + link + " to " + fn);
+      if (fs.accessSync(fn)) {
+        console.log('%s exists - skipping', )
+        return;
+      }
+      console.log('Downloading from %s to %s', link, fn);
       fetch(link)
         .then(function(response) {
           var fd = fs.createWriteStream(fn);
@@ -90,6 +94,6 @@ async function fetchRemix(url) {
   }
 
   console.log('Setting new last to ' + num);
-  fs.writeFileSync(lastFile, num);
+  fs.writeFileSync(lastFile, `${num}`);
 
 })();
